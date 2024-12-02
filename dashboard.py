@@ -1,10 +1,17 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
-st.header("2024 AHI 507 Streamlit Example")
-st.subheader("We are going to go through a couple different examples of loading and visualization information into this dashboard")
 
-st.text("""In this streamlit dashboard, we are going to focus on some recently released school learning modalities data from the NCES, for the years of 2021.""")
+st.set_page_config(page_title="School Learning Modalities Dashboard", layout="wide")
+st.title("📊 School Learning Modalities Dashboard")
+st.caption("Exploring NCES data on learning modalities for the 2020-2021 school year.")
+st.markdown("""
+### Observations
+- The majority of students followed the "In Person" learning modality.
+- Hybrid learning was consistently less popular compared to other modalities.
+""")
+
 
 # ## https://healthdata.gov/National/School-Learning-Modalities-2020-2021/a8v3-a3m3/about_data
 df = pd.read_csv("https://healthdata.gov/resource/a8v3-a3m3.csv?$limit=50000") ## first 1k 
@@ -15,38 +22,53 @@ df['zip_code'] = df['zip_code'].astype(str)
 
 df['week'].value_counts()
 
-## box to show how many rows and columns of data we have: 
-col1, col2, col3 = st.columns(3)
-col1.metric("Columns", df.shape[1]) 
-col2.metric("Rows", len(df))
-col3.metric("Number of unique districts/schools:", df['district_name'].nunique())
 
-## exposing first 1k of NCES 20-21 data
+# Dropdown to filter by district
+districts = df['district_name'].dropna().unique()
+selected_district = st.selectbox("Select a District:", options=["All"] + list(districts))
+
+if selected_district != "All":
+    df = df[df['district_name'] == selected_district]
+
+# Show the filtered dataset
+st.write(f"Showing data for **{selected_district}**")
 st.dataframe(df)
 
 
 
-table = pd.pivot_table(df, values='student_count', index=['week'],
-                       columns=['learning_modality'], aggfunc="sum")
+# Pivot data for visualization
+table = pd.pivot_table(df, values='student_count', index='week_recoded', columns='learning_modality', aggfunc="sum").reset_index()
 
-table = table.reset_index()
-table.columns
-
-## line chart by week 
-st.bar_chart(
+# Create an interactive line chart
+fig = px.line(
     table,
-    x="week",
-    y="Hybrid",
+    x='week_recoded',
+    y=['Hybrid', 'In Person', 'Remote'],
+    labels={'value': 'Student Count', 'week_recoded': 'Week'},
+    title="Learning Modalities Over Time",
+    markers=True
 )
+st.plotly_chart(fig)
 
-st.bar_chart(
-    table,
-    x="week",
-    y="In Person",
-)
+# Display summary stats
+st.write("### Key Insights")
+st.metric("Total Students", df['student_count'].sum())
+st.metric("Average Students per Week", df.groupby('week')['student_count'].sum().mean())
 
-st.bar_chart(
-    table,
-    x="week",
-    y="Remote",
-)
+# Add a pie chart for modality distribution
+modality_distribution = df['learning_modality'].value_counts()
+st.write("### Learning Modality Distribution")
+st.write(modality_distribution)
+
+fig = px.pie(names=modality_distribution.index, values=modality_distribution.values, title="Learning Modality Distribution")
+st.plotly_chart(fig)
+
+
+with st.sidebar:
+    st.header("Filters")
+    selected_modality = st.radio("Select Learning Modality:", options=["All", "Hybrid", "In Person", "Remote"])
+
+if selected_modality != "All":
+    df = df[df['learning_modality'] == selected_modality]
+
+
